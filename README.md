@@ -71,12 +71,5 @@ TESTING=True
 3. Run `api/models/management/change_streams_pre_and_post.py`
 4. Create the catalog and typeahead indexes from `atlas/` (TODO detailed instructions)
 
-### Triggers
-Triggers have their own docker image (`docker/triggers/Dockerfile`).  There are two triggers:
-1. `triggers/update_catalog.py` listens to the Submission collections and updates the discovery collection accordingly.
-2. `triggers/update_typeahead.py` listens to the discovery collection and updates the typeahead collection accordingly.
-
-The triggers have not been configured with a `resume_token` yet.
-
 ### Frontend
 A vue application.  `docker/frontend/Dockerfile` deploys a development version of the vue application and is slow to start up.  Deployments should use `frontend/Dockerfile` as it is configured to generate the static files and then serve them.

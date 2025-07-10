@@ -1,8 +1,0 @@
-requests
-typer
-beanie==1.19.0
-motor
-pydantic[dotenv]==1.10.22
-pydantic[email]==1.10.22
-rocketry==2.5.1
-boto3
