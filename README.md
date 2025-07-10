@@ -73,3 +73,8 @@ TESTING=True
 
 ### Frontend
 A vue application.  `docker/frontend/Dockerfile` deploys a development version of the vue application and is slow to start up.  Deployments should use `frontend/Dockerfile` as it is configured to generate the static files and then serve them.
+
+## Frontend dev
+`cd frontend && npm install && npm run serve`
+
+https://127.0.0.1
