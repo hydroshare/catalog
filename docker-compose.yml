@@ -19,7 +19,8 @@ services:
   # frontend:
   #   image: iguide_frontend
   #   build:
-  #     dockerfile: ./frontend/Dockerfile
+  #     context: ./frontend/
+  #     dockerfile: Dockerfile
   #   #volumes:
   #     #- ./frontend:/app
   #     #- ./frontend/nginx.conf:/etc/nginx/nginx.conf
