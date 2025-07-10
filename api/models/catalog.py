@@ -4,7 +4,7 @@ from typing import Optional
 from beanie import Document
 
 from api.models.user import Submission, S3Path
-from .schema import CoreMetadata, DatasetMetadata
+from .schema import CoreMetadata
 
 
 class CoreMetadataDOC(Document, CoreMetadata):
@@ -36,6 +36,6 @@ class CoreMetadataDOC(Document, CoreMetadata):
         )
 
 
-class DatasetMetadataDOC(CoreMetadataDOC, DatasetMetadata):
+class DatasetMetadataDOC(CoreMetadataDOC):
     repository_identifier: str = None
     s3_path: Optional[S3Path] = None

@@ -1,14 +1,10 @@
-import requests
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
+
 from pydantic import BaseModel, EmailStr, HttpUrl
 
-from api.adapters.base import AbstractRepositoryMetadataAdapter, AbstractRepositoryRequestHandler
-from api.adapters.utils import RepositoryType, register_adapter
-from api.exceptions import RepositoryException
 from api.models import schema
-from api.models.catalog import DatasetMetadataDOC
-from api.models.user import Submission
+from .utils import RepositoryType
 
 
 class Creator(BaseModel):
@@ -113,21 +109,17 @@ class SpatialCoveragePoint(BaseModel):
 
 
 class ContentFile(BaseModel):
-    file_name: str
-    url: HttpUrl
+    path: str
     size: int
-    content_type: str
-    logical_file_type: str
-    modified_time: datetime
+    mime_type: str = None
     checksum: str
 
     def to_dataset_media_object(self):
         media_object = schema.MediaObject.construct()
-        media_object.contentUrl = self.url
-        media_object.encodingFormat = self.content_type
+        media_object.contentUrl = self.path
+        media_object.encodingFormat = self.mime_type
         media_object.contentSize = f"{self.size/1000.00} KB"
-        media_object.name = self.file_name
-        media_object.sha256 = self.checksum
+        media_object.name = self.path.split("/")[-1]
         return media_object
 
 
@@ -147,7 +139,7 @@ class Relation(BaseModel):
         description, url = self.value.rsplit(',', 1)
         relation.description = description.strip()
         relation.url = url.strip()
-        relation.name = self.value
+        relation.name = self.value if self.value else "No name found and is required"
         return relation
 
 
@@ -162,78 +154,32 @@ class Rights(BaseModel):
         return _license
 
 
-class _HydroshareRequestHandler(AbstractRepositoryRequestHandler):
-    def get_metadata(self, record_id: str):
-        hs_meta_url = self.settings.hydroshare_meta_read_url % record_id
-        hs_file_url = self.settings.hydroshare_file_read_url % record_id
-
-        def make_request(url, file_list=False) -> Union[dict, List[dict]]:
-            response = requests.get(url)
-            if response.status_code != 200:
-                raise RepositoryException(status_code=response.status_code, detail=response.text)
-            if not file_list:
-                return response.json()
-
-            content_files = []
-            content_files.extend(response.json()["results"])
-            # check if there are more results to fetch - by default, 100 files are returned from HydroShare
-            while response.json()["next"]:
-                response = requests.get(response.json()["next"])
-                if response.status_code != 200:
-                    raise RepositoryException(status_code=response.status_code, detail=response.text)
-                content_files.extend(response.json()["results"])
-            return content_files
-
-        metadata = make_request(hs_meta_url)
-        files_metadata = make_request(hs_file_url, file_list=True)
-        metadata["content_files"] = files_metadata
-        return metadata
-
-
-class HydroshareMetadataAdapter(AbstractRepositoryMetadataAdapter):
-    repo_api_handler = _HydroshareRequestHandler()
-
+class HydroshareMetadataAdapter:
     @staticmethod
-    def to_catalog_record(metadata: dict) -> DatasetMetadataDOC:
+    def to_catalog_record(metadata: dict):
         """Converts hydroshare resource metadata to a catalog dataset record"""
         hs_metadata_model = _HydroshareResourceMetadata(**metadata)
         return hs_metadata_model.to_catalog_dataset()
 
-    @staticmethod
-    def to_repository_record(catalog_record: DatasetMetadataDOC):
-        """Converts dataset catalog record to hydroshare resource metadata"""
-        raise NotImplementedError
-
-    @staticmethod
-    def update_submission(submission: Submission, repo_record_id: str) -> Submission:
-        """Sets additional hydroshare specific metadata to submission record"""
-
-        submission.repository_identifier = repo_record_id
-        submission.repository = RepositoryType.HYDROSHARE
-        return submission
-
-
-register_adapter(RepositoryType.HYDROSHARE, HydroshareMetadataAdapter)
-
 
 class _HydroshareResourceMetadata(BaseModel):
-    title: str
-    abstract: str
-    url: HttpUrl
-    identifier: HttpUrl
-    creators: List[Creator]
-    created: datetime
-    modified: datetime
-    published: Optional[datetime]
-    subjects: Optional[List[str]]
-    language: str
-    rights: Rights
-    awards: Optional[List[Award]]
-    spatial_coverage: Optional[Union[SpatialCoverageBox, SpatialCoveragePoint]]
-    period_coverage: Optional[TemporalCoverage]
-    relations: Optional[List[Relation]]
-    citation: str
-    content_files: Optional[List[ContentFile]]
+    title: Optional[str] = None
+    abstract: Optional[str] = None
+    url: Optional[HttpUrl] = None
+    identifier: Optional[HttpUrl] = None
+    creators: List[Creator] = []
+    created: Optional[datetime] = None
+    modified: Optional[datetime] = None
+    published: Optional[datetime] = None
+    subjects: Optional[List[str]] = None
+    language: Optional[str] = None
+    rights: Optional[Rights] = None
+    awards: List[Award] = []
+    spatial_coverage: Optional[Union[SpatialCoverageBox, SpatialCoveragePoint]] = None
+    period_coverage: Optional[TemporalCoverage] = None
+    relations: List[Relation] = []
+    citation: Optional[str] = None
+    associatedMedia: List[Any] = []
 
     def to_dataset_creators(self):
         creators = []
@@ -248,10 +194,7 @@ class _HydroshareResourceMetadata(BaseModel):
         return grants
 
     def to_dataset_associated_media(self):
-        media_objects = []
-        for content_file in self.content_files:
-            media_objects.append(content_file.to_dataset_media_object())
-        return media_objects
+        return self.associatedMedia
 
     def to_dataset_is_part_of(self):
         return self._to_dataset_part_relations("IsPartOf")
@@ -283,7 +226,8 @@ class _HydroshareResourceMetadata(BaseModel):
         return ["HydroShare"]
 
     def to_dataset_license(self):
-        return self.rights.to_dataset_license()
+        if self.rights:
+            return self.rights.to_dataset_license()
 
     @staticmethod
     def to_dataset_provider():
@@ -293,7 +237,7 @@ class _HydroshareResourceMetadata(BaseModel):
         return provider
 
     def to_catalog_dataset(self):
-        dataset = DatasetMetadataDOC.construct()
+        dataset = schema.CoreMetadataDOC.construct()
         dataset.provider = self.to_dataset_provider()
         dataset.name = self.title
         dataset.description = self.abstract
